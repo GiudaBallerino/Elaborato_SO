@@ -1,0 +1,50 @@
+/// @file semaphore.c
+/// @brief Contiene l'implementazione delle funzioni
+///         specifiche per la gestione dei SEMAFORI.
+
+#include "semaphore.h"
+
+int semGet(int semKey, int sem_num) {
+  int semId = semget(semKey, sem_num, S_IRUSR | S_IWUSR);
+  if (semId == -1)
+    errExit("semget failed\n");
+  return semId;
+}
+
+void semOp(int semId, unsigned short sem_num, short sem_op) {
+  struct sembuf sop = {.sem_num = sem_num, .sem_op = sem_op, .sem_flg = 0};
+  if (semop(semId, &sop, 1) == -1)
+    errExit("semop failed");
+}
+
+void remove_semaphore(int semId) {
+  if (semctl(semId, 0 /*ignored*/, IPC_RMID, NULL) == -1)
+    errExit("semctl IPC_RMID failed");
+}
+
+int create_sem(unsigned short value) {
+  int semId = semget(IPC_PRIVATE, 1, IPC_CREAT | S_IRUSR | S_IWUSR);
+  if (semId == -1)
+    errExit("semget failed");
+
+  unsigned short values[] = {value};
+  union semun arg;
+  arg.array = values;
+
+  if (semctl(semId, 0 /*ignored*/, SETALL, arg) == -1)
+    errExit("semctl SETALL failed");
+  return semId;
+}
+
+int create_sem_set(key_t semKey, int sem_num, unsigned short values[]) {
+  int semId = semget(semKey, sem_num, IPC_CREAT | S_IRUSR | S_IWUSR);
+  if (semId == -1)
+    errExit("semget failed");
+
+  union semun arg;
+  arg.array = values;
+
+  if (semctl(semId, 0 /*ignored*/, SETALL, arg) == -1)
+    errExit("semctl SETALL failed");
+  return semId;
+}
