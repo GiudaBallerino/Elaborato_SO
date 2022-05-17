@@ -38,6 +38,7 @@ int serverFIFO1 = -1;
 int serverFIFO2 = -1;
 int msqId = -1;
 struct Request *reqSM = NULL;
+int semId;
 
 
 int main(int argc, char * argv[]) {
@@ -71,10 +72,15 @@ int main(int argc, char * argv[]) {
   printf("<Server> creating Message Queue...\n");
   msqId = open_message_queue(msgKey);
 
-  // get Semaphore
+  // get Semaphore SM
   key_t semKey = get_key(PATH_SHARED_MEMORY, KEY_SEMAPHORE);
-  printf("<Client> get semaphore set...\n");
-  int semServerId = semGet(semKey, 2);
+  printf("<Client> get semaphore set for SM...\n");
+  int semSMId = semGet(semKey, 2);
+
+  // get Semaphore FIFO
+  key_t semFFKey = get_key(PATH_FIFO1, KEY_SEMAPHORE);
+  printf("<Client> get semaphore set for FIFO...\n");
+  int semFFId = semGet(semFFKey, 1);
 
   // maschera che ammette solo i segnali SIGINT e SIGUSR1
   sigset_t signalsSet;
@@ -120,9 +126,10 @@ int main(int argc, char * argv[]) {
     // invia tramite FIFO1 al server il numero di file
     if (write(serverFIFO1, &files, sizeof(int)) != sizeof(int))
       errExit("write FIFO1 failed");
+    semOp(semFFId, 0, 1);
 
     // attesa conferma dal server in SharedMemory
-    semOp(semServerId, SEM_DATA_READY, -1);
+    semOp(semSMId, SEM_DATA_READY, -1);
     int response = atoi(reqSM->content);
     if (response != files)
       errExit("message corrupted");
@@ -130,7 +137,7 @@ int main(int argc, char * argv[]) {
     // create Semaphore
     printf("<Client> creating a semaphore set...\n");
     unsigned short value = files;
-    int semId = create_sem(value);
+    semId = create_sem(IPC_PRIVATE, value);
 
     // per ogni file genera un processo figlio Client_i
     int index = 1;
@@ -144,7 +151,7 @@ int main(int argc, char * argv[]) {
       else if (pid == 0) {
         // operazioni dei <Client_i> ...
         pid = getpid();
-        //printf("<Client_%i> PID: %i, File %s\n", index, pid, f->pathname);
+        printf("<Client_%i> PID: %i, File %s\n", index, pid, f->pathname);
 
         int fd = openFile(f->pathname);
         int size = getFileSizeFromFD(fd);
@@ -201,13 +208,13 @@ int main(int argc, char * argv[]) {
         if (msgsnd(msqId, &msqPart, mSize, 0) == -1)
           errExit("msgsnd failed");
 
-        printf("<Client_%i> sending %s on SM\n", index, buffer[3]);
         // SharedMemory
-        semOp(semServerId, SEM_REQUEST, -1);
+        semOp(semSMId, SEM_REQUEST, -1);
+        printf("<Client_%i> sending %s on SM\n", index, buffer[3]);
         reqSM->pid = pid;
         strcpy(reqSM->pathname, f->pathname);
         strcpy(reqSM->content, buffer[3]);
-        semOp(semServerId, SEM_DATA_READY, 1);
+        semOp(semSMId, SEM_DATA_READY, 1);
 
         close(fd); // close file
         printf("<Client_%i> Ended\n", index);
@@ -256,7 +263,7 @@ int search(char path[]) {
       size_t length = appendToPath(path, dentry->d_name);
 
       if (strStartWith(dentry->d_name, STRING_TO_SEARCH) == 0
-        // && strEndsWith(dentry->d_name, STRING_FILE_OUT) == 0
+        && strEndsWith(dentry->d_name, STRING_FILE_OUT) == 0
         && (getFileSize(path) >= FILE_MAX_SIZE) == 0) {
         // printf("Regular file: %s\n", path);
         append_file(path, list);
@@ -282,8 +289,11 @@ void sigHandler(int sig) {
     closeFIFO(serverFIFO2);
 
     // close SharedMemory
-    printf("<Client> detaching the server's shared memory...\n");
+    printf("<Client> detaching from server's shared memory...\n");
     free_shared_memory(reqSM);
+
+    printf("<Client> removing semaphore...\n");
+    remove_semaphore(semId);
 
     printf("<Client> Closed\n");
     exit(0);

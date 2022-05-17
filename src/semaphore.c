@@ -17,21 +17,26 @@ void semOp(int semId, unsigned short sem_num, short sem_op) {
     errExit("semop failed");
 }
 
+int semOpNoWait(int semId, unsigned short sem_num, short sem_op) {
+  struct sembuf sop = {.sem_num = sem_num, .sem_op = sem_op, .sem_flg = IPC_NOWAIT};
+  return semop(semId, &sop, 1);
+}
+
 void remove_semaphore(int semId) {
   if (semctl(semId, 0 /*ignored*/, IPC_RMID, NULL) == -1)
     errExit("semctl IPC_RMID failed");
 }
 
-int create_sem(unsigned short value) {
-  int semId = semget(IPC_PRIVATE, 1, IPC_CREAT | S_IRUSR | S_IWUSR);
+int create_sem(key_t semKey, unsigned short value) {
+  int semId = semget(semKey, 1, IPC_CREAT | S_IRUSR | S_IWUSR);
   if (semId == -1)
     errExit("semget failed");
 
-  unsigned short values[] = {value};
+  // unsigned short values[] = {value};
   union semun arg;
-  arg.array = values;
+  arg.val = value;
 
-  if (semctl(semId, 0 /*ignored*/, SETALL, arg) == -1)
+  if (semctl(semId, 0 /*ignored*/, SETVAL, arg) == -1)
     errExit("semctl SETALL failed");
   return semId;
 }

@@ -28,6 +28,7 @@
 #define STRING_IN_FILE 68 + PATH_BUFFER_SIZE
 
 #define STRING_COMPLETE_STATUS "RECIVED"
+#define STRING_OUTPUT "[Parte %d, del file %s, spedita dal processo %d tramite %s]\n"
 
 
 struct Request {

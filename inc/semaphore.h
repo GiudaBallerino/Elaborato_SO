@@ -20,6 +20,7 @@ union semun {
 
 int semGet(int semKey, int sem_num);
 void semOp(int semId, unsigned short sem_num, short sem_op);
+int semOpNoWait(int semId, unsigned short sem_num, short sem_op);
 void remove_semaphore(int semId);
-int create_sem(unsigned short value);
+int create_sem(key_t semKey, unsigned short value);
 int create_sem_set(key_t semKey, int number, unsigned short values[]);

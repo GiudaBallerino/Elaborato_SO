@@ -24,9 +24,11 @@
 void sigHandler(int sig);
 void addFile(struct FileSet set[], int length, struct Request *file, int index);
 void writeOnFile(int fd, char *content);
+void formatStringOutPut(char *buffer, int part, char *path,int pid);
 
 // Variables
-int semId;
+int semSMId;
+int semFFId;
 int shmId = -1;
 int serverFIFO1 = -1;
 int serverFIFO1_extra = -1;
@@ -58,18 +60,28 @@ int main(int argc, char * argv[]) {
   shmId = alloc_shared_memory(shmKey, sizeof(struct Request));
 
   // create Semaphore
-  key_t semKey = get_key(PATH_SHARED_MEMORY, KEY_SEMAPHORE);
-  printf("<Server> creating a semaphore set...\n");
+  key_t semKeySM = get_key(PATH_SHARED_MEMORY, KEY_SEMAPHORE);
+  printf("<Server> creating a semaphore set for SM...\n");
   unsigned short values[] = {1, 0};
-  semId = create_sem_set(semKey, 2, values);
+  semSMId = create_sem_set(semKeySM, 2, values);
+
+  // create Semaphore for Fifo
+  key_t semKeyFF = get_key(PATH_FIFO1, KEY_SEMAPHORE);
+  printf("<Server> creating a semaphore set for FIFO...\n");
+  unsigned short valueFF = 0;
+  semFFId = create_sem(semKeyFF, valueFF);
+  printf("<Server> Keys: %i %i %i\n", shmKey, semKeyFF, semKeySM);
+  printf("<Server> IDs: %i %i\n", semSMId, semFFId);
 
   // open FIFOs
   printf("<Server> waiting for a client in FIFO %s...\n", PATH_FIFO1);
-  serverFIFO1 = openFIFO(PATH_FIFO1, O_RDONLY);
+  // serverFIFO1 = openFIFO(PATH_FIFO1, O_RDONLY); // blocking
+  serverFIFO1 = openFIFO(PATH_FIFO1, O_RDONLY | O_NONBLOCK); // non blocking
   serverFIFO1_extra = openFIFO(PATH_FIFO1, O_WRONLY); // prevent EOF
-  
+
   printf("<Server> waiting for a client in FIFO %s...\n", PATH_FIFO2);
-  serverFIFO2 = openFIFO(PATH_FIFO2, O_RDONLY);
+  // serverFIFO2 = openFIFO(PATH_FIFO2, O_RDONLY); // blocking
+  serverFIFO2 = openFIFO(PATH_FIFO2, O_RDONLY | O_NONBLOCK); // non blocking
   serverFIFO2_extra = openFIFO(PATH_FIFO2, O_WRONLY); // prevent EOF
 
   // open SharedMemory
@@ -79,6 +91,9 @@ int main(int argc, char * argv[]) {
   while(1) {
     // Get number of file from client
     printf("<Server> waiting for number of files...\n");
+    semOp(semFFId, 0, -1);
+    printf("<Server> waiting number of files passed\n");
+
     int files;
     int bR = read(serverFIFO1, &files, sizeof(int));
     if (bR == -1)
@@ -94,119 +109,123 @@ int main(int argc, char * argv[]) {
 
     // Conferma al client
     sprintf(reqSM->content, "%d", files);
-    semOp(semId, SEM_DATA_READY, 1);
+    semOp(semSMId, SEM_DATA_READY, 1);
 
     struct FileSet set[files];
     for(int i = 0; i < files; i++) // reset set
       set[i].pid = 0;
 
     // si mette in ascolto ciclicamente sui 4 canali
-    for(int n = 0; n < files; n++) {
+    int n = 0;
+    for(; n < files * 4;) {
       // FIFO1
       printf("<Server> listening on FIFO1...\n");
       struct Request reqFIFO1;
       bR = read(serverFIFO1, &reqFIFO1, sizeof(struct Request));
-      if (bR == -1)
-        errExit("<Server> FIFO1 is broken");
-      else if (bR == sizeof(struct Request))
+      if (bR == -1) {
+        if (errno == EAGAIN)
+          printf("<Server> FIFO1: Non letto niente\n");
+        else
+          errExit("<Server> FIFO1 is broken");
+      }
+      else if (bR == sizeof(struct Request)){
         printf("<Server> received data from %i on FF1: %s\n", reqFIFO1.pid, reqFIFO1.content);
 
-      addFile(set, files, &reqFIFO1, 0);
+        addFile(set, files, &reqFIFO1, 0);
+        n++;
+      }
 
       // FIFO2
       printf("<Server> listening on FIFO2...\n");
       struct Request reqFIFO2;
       bR = read(serverFIFO2, &reqFIFO2, sizeof(struct Request));
-      if (bR == -1)
-        errExit("<Server> FIFO2 is broken");
-      else if (bR == sizeof(struct Request))
+      if (bR == -1) {
+        if (errno == EAGAIN)
+          printf("<Server> FIFO2: Non letto niente\n");
+        else
+          errExit("<Server> FIFO2 is broken");
+      }
+      else if (bR == sizeof(struct Request)) {
         printf("<Server> received data from %i on FF2: %s\n", reqFIFO2.pid, reqFIFO2.content);
 
-      addFile(set, files, &reqFIFO2, 1);
+        addFile(set, files, &reqFIFO2, 1);
+        n++;
+      }
 
       // MsgQueue
       printf("<Server> listening on MQ...\n");
       struct Request reqMQ;
       size_t mSize = sizeof(struct Request) - sizeof(long);
-      if (msgrcv(msqId, &reqMQ, mSize, 0, 0) == -1)
-        errExit("<Server> MQ is broken");
-      else
+      // if (msgrcv(msqId, &reqMQ, mSize, 0, 0) == -1) // blocking
+      if (msgrcv(msqId, &reqMQ, mSize, 0, IPC_NOWAIT) == -1)
+        if (errno == ENOMSG)
+          printf("<Server> MQ: Non letto niente\n");
+        else
+          errExit("<Server> MQ is broken");
+      else {
         printf("<Server> received data from %i on MQ: %s\n", reqMQ.pid, reqMQ.content);
 
-      addFile(set, files, &reqMQ, 2);
+        addFile(set, files, &reqMQ, 2);
+        n++;
+      }
 
       // SharedMemory
       printf("<Server> listening on SharedMemory...\n");
-      semOp(semId, SEM_DATA_READY, -1);
-      printf("<Server> received data from %i on SM: %s\n", reqSM->pid, reqSM->content);
-      addFile(set, files, reqSM, 3);
-
-      semOp(semId, SEM_REQUEST, 1);
+      if (semOpNoWait(semSMId, SEM_DATA_READY, -1) == -1)
+        if (errno == EAGAIN)
+          printf("<Server> SM: Non letto niente\n");
+        else
+          errExit("semop failed");
+      else {
+        // semOp(semSMId, SEM_DATA_READY, -1);
+        printf("<Server> received data from %i on SM: %s\n", reqSM->pid, reqSM->content);
+        addFile(set, files, reqSM, 3);
+        n++;
+        semOp(semSMId, SEM_REQUEST, 1);
+      }
     }
+    printf("<Server> Files received\n");
 
     for(int i=0; i < files; i++) {
-      printf("<Server> FF1: %s - FF2: %s - MQ: %s - SM: %s\n", set[i].contentFF1, set[i].contentFF2, set[i].contentMQ, set[i].contentSM);
+      printf("<Server> File %i -> FF1: %s - FF2: %s - MQ: %s - SM: %s\n", i+1, set[i].contentFF1, set[i].contentFF2, set[i].contentMQ, set[i].contentSM);
 
-      /*strcat(set[i].pathname, STRING_FILE_OUT);
-      int fileD = open(set[i].pathname, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+      strcat(set[i].pathname, STRING_FILE_OUT);
+      int fileD = open(set[i].pathname, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
       if (fileD == -1)
         errExit("open failed");
       if (lseek(fileD, 0, SEEK_END) == -1)
         errExit("lssek failed");
 
-      // [Parte <PART>, del file <DIR>, spedita dal processo <PID> tramite <SENDER>]\n
-      for(int p = 1; p <= 4; p++) {
-        char outBuffer[STRING_IN_FILE] = "";
-        strcat(outBuffer, "[Parte ");
+      char outBuffer[STRING_IN_FILE] = "";
 
-        char part[2];
-        // itoa(p, part, 10);
-        sprintf(part, "%i", p);
-        strcat(outBuffer, part);
+      formatStringOutPut(outBuffer, 1, set[i].pathname,set[i].pid);
+      writeOnFile(fileD, outBuffer);
+      writeOnFile(fileD, set[i].contentFF1);
+      writeOnFile(fileD, "\n\n");
 
-        strcat(outBuffer, ", del File ");
-        strcat(outBuffer, set[i].pathname);
+      formatStringOutPut(outBuffer, 2, set[i].pathname,set[i].pid);
+      writeOnFile(fileD, outBuffer);
+      writeOnFile(fileD, set[i].contentFF2);
+      writeOnFile(fileD, "\n\n");  
 
-        strcat(outBuffer, ", spedita dal processo ");
+      formatStringOutPut(outBuffer, 3, set[i].pathname,set[i].pid);
+      writeOnFile(fileD, outBuffer);
+      writeOnFile(fileD, set[i].contentMQ);
+      writeOnFile(fileD, "\n\n");
 
-        char pid[6];
-        // itoa(set[i].pid, pid, 10);
-        sprintf(pid, "%i", set[i].pid);
-        strcat(outBuffer, pid);
+      formatStringOutPut(outBuffer, 4, set[i].pathname,set[i].pid);
+      writeOnFile(fileD, outBuffer);
+      writeOnFile(fileD, set[i].contentSM);
+      writeOnFile(fileD, "\n");
 
-        strcat(outBuffer, " tramite ");
-        if(p == 1) {
-          strcat(outBuffer,"FIFO1]\n");
-          writeOnFile(fileD, outBuffer);
-          writeOnFile(fileD, set[i].contentFF1);
-        }
-        else if(p == 2) {
-          strcat(outBuffer, "FIFO2]\n");
-          writeOnFile(fileD, outBuffer);
-          writeOnFile(fileD, set[i].contentFF2);
-        }
-        else if(p == 3) {
-          strcat(outBuffer, "MsgQueue]\n");
-          writeOnFile(fileD, outBuffer);
-          writeOnFile(fileD, set[i].contentMQ);
-        }
-        else if(p == 3) {
-          strcat(outBuffer, "ShdMem]\n");
-          writeOnFile(fileD, outBuffer);
-          writeOnFile(fileD, set[i].contentSM);
-        }
-        writeOnFile(fileD, "\n");
-      }
-
-      close(fileD);*/
+      close(fileD);
     }
-
-    printf("<Server> FILES RECEIVED\n");
+    printf("<Server> Files saved\n");
 
     // Conferma al client su MQ
+    printf("<Server> Conferma al Client su MQ\n");
     if (msgsnd(msqId, STRING_COMPLETE_STATUS, sizeof(STRING_COMPLETE_STATUS) - sizeof(long), 0) == -1)
       errExit("msgsnd failed");
-
   }
 
   return 0;
@@ -235,7 +254,7 @@ void sigHandler(int sig) {
 
   // remove Semaphore
   printf("<Server> removing semaphore...\n");
-  remove_semaphore(semId);
+  remove_semaphore(semSMId);
   
   // remove SharedMemory
   printf("<Server> removing the shared memory...\n");
@@ -271,16 +290,19 @@ void writeOnFile(int fd, char *content) {
     errExit("write failed");
 }
 
-/*void writeOnFile(char *pathname, char *content) {
-  strcat(pathname, STRING_FILE_OUT);
-  int fileD = open(pathname, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
-  if (fileD == -1)
-    errExit("open failed");
-  if (lseek(fileD, 0, SEEK_END) == -1)
-    errExit("lssek failed");
-
-  int length = strlen(content);
-  if (write(fileD, content, length) != length)
-    errExit("write failed");
-  close(fileD);
-}*/
+void formatStringOutPut(char *buffer, int part, char *path,int pid){
+  switch(part) {
+    case 1:
+      sprintf(buffer, STRING_OUTPUT, part, path, pid, "FIFO1");
+      break;
+    case 2:
+      sprintf(buffer, STRING_OUTPUT, part, path, pid, "FIFO2");
+      break;
+    case 3:
+      sprintf(buffer,STRING_OUTPUT, part, path, pid, "MsgQueue");
+      break;
+    case 4:
+      sprintf(buffer, STRING_OUTPUT, part, path, pid, "ShdMem");
+      break;
+  }
+}

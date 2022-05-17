@@ -5,9 +5,9 @@
 #include "keys_utils.h"
 
 key_t get_key(const char *__path, const int __id) {
-  key_t shmKey;
-  if ((shmKey = ftok("/tmp", 'a')) == (key_t) -1) {
+  key_t key;
+  if ((key = ftok(__path, __id)) == (key_t) -1) {
     errExit("IPC error: ftok");
   }
-  return shmKey;
+  return key;
 }
