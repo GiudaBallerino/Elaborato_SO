@@ -39,25 +39,27 @@ int serverFIFO2 = -1;
 int msqId = -1;
 struct Request *reqSM = NULL;
 int semId;
+int semRECId;
 
 
 int main(int argc, char * argv[]) {
-  if (argc > 2) {
-    printf("Usage: %s <sourceDir?>\n", argv[0]);
+  // if (argc > 2) {
+  if (argc != 2) {
+    printf("Usage: %s <sourceDir>\n", argv[0]);
     return 1;
   }
 
   list = (struct list*) malloc(sizeof(struct list));
   list->entry = NULL;
 
-  char sourceDir[PATH_BUFFER_SIZE] = "/home/runner/Elaborato/myDir";
+  char sourceDir[PATH_BUFFER_SIZE]; // = "/home/runner/Elaborato/myDir";
   if (argc == 2)
     strcpy(sourceDir, argv[1]);
 
   // Open FIFO
-  printf("<Client> opening FIFO %s...\n", PATH_FIFO1);
+  printf("<Client> opening FIFO1 %s...\n", PATH_FIFO1);
   serverFIFO1 = openFIFO(PATH_FIFO1, O_WRONLY);
-  printf("<Client> opening FIFO %s...\n", PATH_FIFO2);
+  printf("<Client> opening FIFO2 %s...\n", PATH_FIFO2);
   serverFIFO2 = openFIFO(PATH_FIFO2, O_WRONLY);
 
   // Open SharedMemory
@@ -67,20 +69,31 @@ int main(int argc, char * argv[]) {
   printf("<Client> attaching the server's shared memory...\n");
   reqSM = (struct Request *)get_shared_memory(shmIdServer, 0);
 
+
   // Open MsgQueue
   key_t msgKey = get_key(PATH_MESSAGE_QUEUE, KEY_MESSAGE_QUEUE);
   printf("<Server> creating Message Queue...\n");
   msqId = open_message_queue(msgKey);
+
+  // create receivers semaphore
+  key_t semKeyREC = get_key(PATH_SEMAPHORE, KEY_RECEIVERS);
+  printf("<Client> get semaphore set for receivers...\n");
+  unsigned short values[] = {50, 50, 50};
+  semRECId = create_sem_set(semKeyREC, 3, values);
+
+  // get Semaphore FIFO
+  key_t semFFKey = get_key(PATH_FIFO1, KEY_SEMAPHORE);
+  printf("<Client> get semaphore set for FIFO...\n");
+  int semFFId = semGet(semFFKey, 1);
 
   // get Semaphore SM
   key_t semKey = get_key(PATH_SHARED_MEMORY, KEY_SEMAPHORE);
   printf("<Client> get semaphore set for SM...\n");
   int semSMId = semGet(semKey, 2);
 
-  // get Semaphore FIFO
-  key_t semFFKey = get_key(PATH_FIFO1, KEY_SEMAPHORE);
-  printf("<Client> get semaphore set for FIFO...\n");
-  int semFFId = semGet(semFFKey, 1);
+  // create Semaphore for Fork
+  printf("<Client> creating a semaphore set for Fork...\n");
+  semId = create_sem(IPC_PRIVATE, 0);
 
   // maschera che ammette solo i segnali SIGINT e SIGUSR1
   sigset_t signalsSet;
@@ -134,10 +147,11 @@ int main(int argc, char * argv[]) {
     if (response != files)
       errExit("message corrupted");
 
-    // create Semaphore
-    printf("<Client> creating a semaphore set...\n");
-    unsigned short value = files;
-    semId = create_sem(IPC_PRIVATE, value);
+    // set Semaphore
+    union semun arg;
+    arg.val = files;
+    if (semctl(semId, 0 /*ignored*/, SETVAL, arg) == -1)
+      errExit("semctl SETALL failed");
 
     // per ogni file genera un processo figlio Client_i
     int index = 1;
@@ -179,6 +193,7 @@ int main(int argc, char * argv[]) {
 
         printf("<Client_%i> send %s on FIFO1\n", index, buffer[0]);
         // FIFO1
+        semOp(semRECId, 0, -1);
         struct Request fifo1Part;
         fifo1Part.pid = pid;
         strcpy(fifo1Part.content, buffer[0]);
@@ -189,6 +204,7 @@ int main(int argc, char * argv[]) {
 
         printf("<Client_%i> sending %s on FIFO2\n", index, buffer[1]);
         // FIFO2
+        semOp(semRECId, 1, -1);
         struct Request fifo2Part;
         fifo2Part.pid = pid;
         strcpy(fifo2Part.content, buffer[1]);
@@ -199,6 +215,7 @@ int main(int argc, char * argv[]) {
 
         printf("<Client_%i> sending %s on MQ\n", index, buffer[2]);
         // MsgQueue
+        semOp(semRECId, 2, -1);
         struct Request msqPart;
         msqPart.pid = pid;
         strcpy(msqPart.pathname, f->pathname);
@@ -292,8 +309,11 @@ void sigHandler(int sig) {
     printf("<Client> detaching from server's shared memory...\n");
     free_shared_memory(reqSM);
 
+    // remove Semaphore
     printf("<Client> removing semaphore...\n");
     remove_semaphore(semId);
+    printf("<Client> removing semaphore...\n");
+    remove_semaphore(semRECId);
 
     printf("<Client> Closed\n");
     exit(0);

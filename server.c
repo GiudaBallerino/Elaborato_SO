@@ -68,10 +68,7 @@ int main(int argc, char * argv[]) {
   // create Semaphore for Fifo
   key_t semKeyFF = get_key(PATH_FIFO1, KEY_SEMAPHORE);
   printf("<Server> creating a semaphore set for FIFO...\n");
-  unsigned short valueFF = 0;
-  semFFId = create_sem(semKeyFF, valueFF);
-  printf("<Server> Keys: %i %i %i\n", shmKey, semKeyFF, semKeySM);
-  printf("<Server> IDs: %i %i\n", semSMId, semFFId);
+  semFFId = create_sem(semKeyFF, (unsigned short)0);
 
   // open FIFOs
   printf("<Server> waiting for a client in FIFO %s...\n", PATH_FIFO1);
@@ -115,20 +112,24 @@ int main(int argc, char * argv[]) {
     for(int i = 0; i < files; i++) // reset set
       set[i].pid = 0;
 
+    //get receivers semaphore
+    key_t semKeyREC= get_key(PATH_SEMAPHORE, KEY_RECEIVERS);
+    printf("<Server> get semaphore set for receivers...\n");
+    int semRECId = semGet(semKeyREC, 3);
+
     // si mette in ascolto ciclicamente sui 4 canali
-    int n = 0;
-    for(; n < files * 4;) {
+    for(int n = 0; n < files * 4; ) {
       // FIFO1
-      printf("<Server> listening on FIFO1...\n");
+      printf("<Server> reading on FIFO1...\n");
       struct Request reqFIFO1;
       bR = read(serverFIFO1, &reqFIFO1, sizeof(struct Request));
       if (bR == -1) {
-        if (errno == EAGAIN)
-          printf("<Server> FIFO1: Non letto niente\n");
-        else
+        if (errno != EAGAIN)
           errExit("<Server> FIFO1 is broken");
-      }
-      else if (bR == sizeof(struct Request)){
+        // else
+        //   printf("<Server> FIFO1: Non letto niente\n");
+      } else if (bR == sizeof(struct Request)){
+        semOp(semRECId, 0, 1);
         printf("<Server> received data from %i on FF1: %s\n", reqFIFO1.pid, reqFIFO1.content);
 
         addFile(set, files, &reqFIFO1, 0);
@@ -136,16 +137,16 @@ int main(int argc, char * argv[]) {
       }
 
       // FIFO2
-      printf("<Server> listening on FIFO2...\n");
+      printf("<Server> reading on FIFO2...\n");
       struct Request reqFIFO2;
       bR = read(serverFIFO2, &reqFIFO2, sizeof(struct Request));
       if (bR == -1) {
-        if (errno == EAGAIN)
-          printf("<Server> FIFO2: Non letto niente\n");
-        else
+        if (errno != EAGAIN)
           errExit("<Server> FIFO2 is broken");
-      }
-      else if (bR == sizeof(struct Request)) {
+        // else
+        //   printf("<Server> FIFO2: Non letto niente\n");
+      } else if (bR == sizeof(struct Request)) {
+        semOp(semRECId, 1, 1);
         printf("<Server> received data from %i on FF2: %s\n", reqFIFO2.pid, reqFIFO2.content);
 
         addFile(set, files, &reqFIFO2, 1);
@@ -153,16 +154,17 @@ int main(int argc, char * argv[]) {
       }
 
       // MsgQueue
-      printf("<Server> listening on MQ...\n");
+      printf("<Server> reading on MQ...\n");
       struct Request reqMQ;
       size_t mSize = sizeof(struct Request) - sizeof(long);
       // if (msgrcv(msqId, &reqMQ, mSize, 0, 0) == -1) // blocking
-      if (msgrcv(msqId, &reqMQ, mSize, 0, IPC_NOWAIT) == -1)
-        if (errno == ENOMSG)
-          printf("<Server> MQ: Non letto niente\n");
-        else
+      if (msgrcv(msqId, &reqMQ, mSize, 0, IPC_NOWAIT) == -1) {
+        if (errno != ENOMSG)
           errExit("<Server> MQ is broken");
-      else {
+        // else
+        //   printf("<Server> MQ: Non letto niente\n");
+      } else {
+        semOp(semRECId, 2, 1);
         printf("<Server> received data from %i on MQ: %s\n", reqMQ.pid, reqMQ.content);
 
         addFile(set, files, &reqMQ, 2);
@@ -170,13 +172,13 @@ int main(int argc, char * argv[]) {
       }
 
       // SharedMemory
-      printf("<Server> listening on SharedMemory...\n");
-      if (semOpNoWait(semSMId, SEM_DATA_READY, -1) == -1)
-        if (errno == EAGAIN)
-          printf("<Server> SM: Non letto niente\n");
-        else
+      printf("<Server> reading on SharedMemory...\n");
+      if (semOpNoWait(semSMId, SEM_DATA_READY, -1) == -1) {
+        if (errno != EAGAIN)
           errExit("semop failed");
-      else {
+        // else
+        //   printf("<Server> SM: Non letto niente\n");
+      } else {
         // semOp(semSMId, SEM_DATA_READY, -1);
         printf("<Server> received data from %i on SM: %s\n", reqSM->pid, reqSM->content);
         addFile(set, files, reqSM, 3);

@@ -9,13 +9,14 @@
 
 #define PATH_FIFO1 "/tmp/fifo1"
 #define PATH_FIFO2 "/tmp/fifo2"
-
 #define PATH_SHARED_MEMORY "/tmp"
-#define KEY_SHARED_MEMORY 'a'
-#define KEY_SEMAPHORE 's'
-
 #define PATH_MESSAGE_QUEUE "/tmp"
+#define PATH_SEMAPHORE "/tmp"
+
+#define KEY_SHARED_MEMORY 'a'
 #define KEY_MESSAGE_QUEUE 'm'
+#define KEY_SEMAPHORE 's'
+#define KEY_RECEIVERS 'r'
 
 #define SEM_REQUEST 0
 #define SEM_DATA_READY 1
