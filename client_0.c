@@ -69,7 +69,6 @@ int main(int argc, char * argv[]) {
   printf("<Client> attaching the server's shared memory...\n");
   reqSM = (struct Request *)get_shared_memory(shmIdServer, 0);
 
-
   // Open MsgQueue
   key_t msgKey = get_key(PATH_MESSAGE_QUEUE, KEY_MESSAGE_QUEUE);
   printf("<Server> creating Message Queue...\n");
@@ -93,7 +92,7 @@ int main(int argc, char * argv[]) {
 
   // create Semaphore for Fork
   printf("<Client> creating a semaphore set for Fork...\n");
-  semId = create_sem(IPC_PRIVATE, 0);
+  semId = create_sem(IPC_PRIVATE, 0 /*ignored*/);
 
   // maschera che ammette solo i segnali SIGINT e SIGUSR1
   sigset_t signalsSet;
@@ -187,8 +186,8 @@ int main(int argc, char * argv[]) {
           }
         } while (bR > 0 && part > 0);
 
-        semOp(semId, 0, -1);
         printf("<Client_%i> Wait for all child\n", index);
+        semOp(semId, 0, -1);
         semOp(semId, 0, 0); // wait semaphore to be zero
 
         printf("<Client_%i> send %s on FIFO1\n", index, buffer[0]);
@@ -280,8 +279,8 @@ int search(char path[]) {
       size_t length = appendToPath(path, dentry->d_name);
 
       if (strStartWith(dentry->d_name, STRING_TO_SEARCH) == 0
-        && strEndsWith(dentry->d_name, STRING_FILE_OUT) == 0
-        && (getFileSize(path) >= FILE_MAX_SIZE) == 0) {
+        // && strEndsWith(dentry->d_name, STRING_FILE_OUT) == 0
+        && (getFileSize(path) > FILE_MAX_SIZE) == 0) {
         // printf("Regular file: %s\n", path);
         append_file(path, list);
         count++;

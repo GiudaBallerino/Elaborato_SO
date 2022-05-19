@@ -32,7 +32,6 @@ int create_sem(key_t semKey, unsigned short value) {
   if (semId == -1)
     errExit("semget failed");
 
-  // unsigned short values[] = {value};
   union semun arg;
   arg.val = value;
 

@@ -112,7 +112,7 @@ int main(int argc, char * argv[]) {
     for(int i = 0; i < files; i++) // reset set
       set[i].pid = 0;
 
-    //get receivers semaphore
+    // get receivers semaphore
     key_t semKeyREC= get_key(PATH_SEMAPHORE, KEY_RECEIVERS);
     printf("<Server> get semaphore set for receivers...\n");
     int semRECId = semGet(semKeyREC, 3);
@@ -189,10 +189,13 @@ int main(int argc, char * argv[]) {
     printf("<Server> Files received\n");
 
     for(int i=0; i < files; i++) {
-      printf("<Server> File %i -> FF1: %s - FF2: %s - MQ: %s - SM: %s\n", i+1, set[i].contentFF1, set[i].contentFF2, set[i].contentMQ, set[i].contentSM);
+      // printf("<Server> File %i -> FF1: %s - FF2: %s - MQ: %s - SM: %s\n", i+1, set[i].contentFF1, set[i].contentFF2, set[i].contentMQ, set[i].contentSM);
 
-      strcat(set[i].pathname, STRING_FILE_OUT);
-      int fileD = open(set[i].pathname, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
+      char pathname[PATH_BUFFER_SIZE] = "";
+      strcat(pathname, set[i].pathname);
+      strcat(pathname, STRING_FILE_OUT);
+
+      int fileD = open(pathname, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
       if (fileD == -1)
         errExit("open failed");
       if (lseek(fileD, 0, SEEK_END) == -1)
@@ -200,22 +203,22 @@ int main(int argc, char * argv[]) {
 
       char outBuffer[STRING_IN_FILE] = "";
 
-      formatStringOutPut(outBuffer, 1, set[i].pathname,set[i].pid);
+      formatStringOutPut(outBuffer, 1, set[i].pathname, set[i].pid);
       writeOnFile(fileD, outBuffer);
       writeOnFile(fileD, set[i].contentFF1);
       writeOnFile(fileD, "\n\n");
 
-      formatStringOutPut(outBuffer, 2, set[i].pathname,set[i].pid);
+      formatStringOutPut(outBuffer, 2, set[i].pathname, set[i].pid);
       writeOnFile(fileD, outBuffer);
       writeOnFile(fileD, set[i].contentFF2);
       writeOnFile(fileD, "\n\n");  
 
-      formatStringOutPut(outBuffer, 3, set[i].pathname,set[i].pid);
+      formatStringOutPut(outBuffer, 3, set[i].pathname, set[i].pid);
       writeOnFile(fileD, outBuffer);
       writeOnFile(fileD, set[i].contentMQ);
       writeOnFile(fileD, "\n\n");
 
-      formatStringOutPut(outBuffer, 4, set[i].pathname,set[i].pid);
+      formatStringOutPut(outBuffer, 4, set[i].pathname, set[i].pid);
       writeOnFile(fileD, outBuffer);
       writeOnFile(fileD, set[i].contentSM);
       writeOnFile(fileD, "\n");
