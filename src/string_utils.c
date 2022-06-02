@@ -17,3 +17,10 @@ int strEndsWith(const char *string, const char *suffix) {
     return 0;
   return strncmp(string + lenstr - lensuffix, suffix, lensuffix) == 0;
 }
+
+char *strRemoveSuffix(char *string, const char* suffix) {
+  const int length = strlen(string);
+  const int length_suffix = strlen(suffix);
+  string[length- length_suffix] = '\0';
+  return string;
+}

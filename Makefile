@@ -38,7 +38,7 @@ clean: wipe
 	@echo "Removed object files and executables"
 
 wipe:
-	@rm -vf /tmp/*
+	@rm -rf /tmp/*
 	@echo "Removed files in /tmp"
 	@rm -vf ./myDir/*_out
 	@rm -vf ./myDir/subfolder/*_out

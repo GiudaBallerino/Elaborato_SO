@@ -38,13 +38,14 @@ int serverFIFO1 = -1;
 int serverFIFO2 = -1;
 int msqId = -1;
 struct Request *reqSM = NULL;
+struct SharedMemoryRequest *reqFileSM = NULL;
 int semId;
 int semRECId;
 
 
 int main(int argc, char * argv[]) {
-  // if (argc > 2) {
-  if (argc != 2) {
+  if (argc > 2) {
+  // if (argc != 2) {
     printf("Usage: %s <sourceDir>\n", argv[0]);
     return 1;
   }
@@ -52,7 +53,7 @@ int main(int argc, char * argv[]) {
   list = (struct list*) malloc(sizeof(struct list));
   list->entry = NULL;
 
-  char sourceDir[PATH_BUFFER_SIZE]; // = "/home/runner/Elaborato/myDir";
+  char sourceDir[PATH_BUFFER_SIZE] = "/home/runner/Elaborato/myDir";
   if (argc == 2)
     strcpy(sourceDir, argv[1]);
 
@@ -68,6 +69,13 @@ int main(int argc, char * argv[]) {
   int shmIdServer = alloc_shared_memory(shmKeyServer, sizeof(struct Request));
   printf("<Client> attaching the server's shared memory...\n");
   reqSM = (struct Request *)get_shared_memory(shmIdServer, 0);
+  
+  // Open File SharedMemory
+  key_t shmFileKey = get_key(PATH_SHARED_MEMORY, KEY_SHARED_MEMORY_FILES);
+  printf("<Client> getting the server's shared memory for files...\n");
+  int shmFileIdServer = alloc_shared_memory(shmFileKey, sizeof(struct Request));
+  printf("<Client> attaching the server's shared memory for files...\n");
+  reqFileSM = (struct SharedMemoryRequest*)get_shared_memory(shmFileIdServer, 0);
 
   // Open MsgQueue
   key_t msgKey = get_key(PATH_MESSAGE_QUEUE, KEY_MESSAGE_QUEUE);
@@ -77,8 +85,8 @@ int main(int argc, char * argv[]) {
   // create receivers semaphore
   key_t semKeyREC = get_key(PATH_SEMAPHORE, KEY_RECEIVERS);
   printf("<Client> get semaphore set for receivers...\n");
-  unsigned short values[] = {50, 50, 50};
-  semRECId = create_sem_set(semKeyREC, 3, values);
+  unsigned short values[] = {MAX_IPC_FILE, MAX_IPC_FILE, MAX_IPC_FILE, MAX_IPC_FILE};
+  semRECId = create_sem_set(semKeyREC, 4, values);
 
   // get Semaphore FIFO
   key_t semFFKey = get_key(PATH_FIFO1, KEY_SEMAPHORE);
@@ -89,6 +97,11 @@ int main(int argc, char * argv[]) {
   key_t semKey = get_key(PATH_SHARED_MEMORY, KEY_SEMAPHORE);
   printf("<Client> get semaphore set for SM...\n");
   int semSMId = semGet(semKey, 2);
+
+  // get mutex Semaphore SM
+  key_t semKeyMutexSM = get_key(PATH_SHARED_MEMORY, KEY_FILE_SEMAPHORE);
+  printf("<Client> get mutex semaphore set for SM...\n");
+  int semSMMutexId = semGet(semKeyMutexSM, 1);
 
   // create Semaphore for Fork
   printf("<Client> creating a semaphore set for Fork...\n");
@@ -190,47 +203,114 @@ int main(int argc, char * argv[]) {
         semOp(semId, 0, -1);
         semOp(semId, 0, 0); // wait semaphore to be zero
 
-        printf("<Client_%i> send %s on FIFO1\n", index, buffer[0]);
-        // FIFO1
-        semOp(semRECId, 0, -1);
         struct Request fifo1Part;
         fifo1Part.pid = pid;
         strcpy(fifo1Part.content, buffer[0]);
         strcpy(fifo1Part.pathname, f->pathname);
 
-        if (write(serverFIFO1, &fifo1Part, sizeof(struct Request)) != sizeof(struct Request))
-          errExit("write FIFO1 failed");
-
-        printf("<Client_%i> sending %s on FIFO2\n", index, buffer[1]);
-        // FIFO2
-        semOp(semRECId, 1, -1);
         struct Request fifo2Part;
         fifo2Part.pid = pid;
         strcpy(fifo2Part.content, buffer[1]);
         strcpy(fifo2Part.pathname, f->pathname);
 
-        if (write(serverFIFO2, &fifo2Part, sizeof(struct Request)) != sizeof(struct Request))
-          errExit("write FIFO2 failed");
-
-        printf("<Client_%i> sending %s on MQ\n", index, buffer[2]);
-        // MsgQueue
-        semOp(semRECId, 2, -1);
         struct Request msqPart;
         msqPart.pid = pid;
         strcpy(msqPart.pathname, f->pathname);
         strcpy(msqPart.content, buffer[2]);
 
-        size_t mSize = sizeof(struct Request) - sizeof(long);
-        if (msgsnd(msqId, &msqPart, mSize, 0) == -1)
-          errExit("msgsnd failed");
+        int sended[] = {1, 1, 1, 1};
 
-        // SharedMemory
-        semOp(semSMId, SEM_REQUEST, -1);
-        printf("<Client_%i> sending %s on SM\n", index, buffer[3]);
-        reqSM->pid = pid;
-        strcpy(reqSM->pathname, f->pathname);
-        strcpy(reqSM->content, buffer[3]);
-        semOp(semSMId, SEM_DATA_READY, 1);
+        while (sended[0] == 1
+          || sended[1] == 1
+          || sended[2] == 1
+          || sended[3] == 1) {
+          // FIFO1
+          if (sended[0] == 1) {
+            if (semOpNoWait(semRECId, 0, -1) == -1) {
+              if (errno != EAGAIN)
+                errExit("semop failed");
+            } else {
+              // printf("<Client_%i> send %s on FIFO1\n", index, buffer[0]);
+              if (write(serverFIFO1, &fifo1Part, sizeof(struct Request)) != sizeof(struct Request))
+                errExit("write FIFO1 failed");
+              else
+                sended[0] = 0;
+            }
+          }
+          // semOp(semRECId, 0, -1);
+          // if (write(serverFIFO1, &fifo1Part, sizeof(struct Request)) != sizeof(struct Request))
+          //   errExit("write FIFO1 failed");
+  
+          // FIFO2
+          if (sended[1] == 1) {
+            if (semOpNoWait(semRECId, 1, -1) == -1) {
+              if (errno != EAGAIN)
+                errExit("semop failed");
+            } else {
+              // printf("<Client_%i> sending %s on FIFO2\n", index, buffer[1]);
+              if (write(serverFIFO2, &fifo2Part, sizeof(struct Request)) != sizeof(struct Request))
+                errExit("write FIFO2 failed");
+              else
+                sended[1] = 0;
+            }
+          }
+          // semOp(semRECId, 1, -1);
+          // if (write(serverFIFO2, &fifo2Part, sizeof(struct Request)) != sizeof(struct Request))
+          //   errExit("write FIFO2 failed");
+  
+          // MsgQueue
+          if (sended[2] == 1) {
+            if (semOpNoWait(semRECId, 2, -1) == -1) {
+              if (errno != EAGAIN)
+                errExit("semop failed");
+            } else {
+              // printf("<Client_%i> sending %s on MQ\n", index, buffer[2]);
+              size_t mSize = sizeof(struct Request) - sizeof(long);
+              if (msgsnd(msqId, &msqPart, mSize, 0) == -1)
+                errExit("msgsnd failed");
+              else
+                sended[2] = 0;
+            }
+          }
+          // semOp(semRECId, 2, -1);
+          // size_t mSize = sizeof(struct Request) - sizeof(long);
+          // if (msgsnd(msqId, &msqPart, mSize, 0) == -1)
+          //   errExit("msgsnd failed");
+  
+          // SharedMemory
+          if (sended[3] == 1) {
+            if (semOpNoWait(semRECId, 3, -1) == -1) {
+              if (errno != EAGAIN)
+                errExit("semop failed");
+            } else {
+              if (semOpNoWait(semSMMutexId, 0, -1) == -1) {
+                if (errno != EAGAIN)
+                  errExit("semop failed");
+                else
+                  semOp(semRECId, 3, 1); // libera semaforo
+              } else {
+                int index = 0;
+                for(; index < MAX_IPC_FILE; index++)
+                  if (reqFileSM->index[index] == 0)
+                    break;
+                reqFileSM->requests[index].pid = pid;
+                strcpy(reqFileSM->requests[index].pathname, f->pathname);
+                strcpy(reqFileSM->requests[index].content, buffer[3]);
+  
+                reqFileSM->index[index] = 1;
+                sended[3] = 0;
+                semOp(semSMMutexId, 0, 1);
+              }
+            }
+          }
+          
+          // semOp(semSMId, SEM_REQUEST, -1);
+          // // printf("<Client_%i> sending %s on SM\n", index, buffer[3]);
+          // reqSM->pid = pid;
+          // strcpy(reqSM->pathname, f->pathname);
+          // strcpy(reqSM->content, buffer[3]);
+          // semOp(semSMId, SEM_DATA_READY, 1);
+        }
 
         close(fd); // close file
         printf("<Client_%i> Ended\n", index);
@@ -281,7 +361,7 @@ int search(char path[]) {
       if (strStartWith(dentry->d_name, STRING_TO_SEARCH) == 0
         // && strEndsWith(dentry->d_name, STRING_FILE_OUT) == 0
         && (getFileSize(path) > FILE_MAX_SIZE) == 0) {
-        // printf("Regular file: %s\n", path);
+        printf("Regular file: %s\n", path);
         append_file(path, list);
         count++;
       }
@@ -307,6 +387,10 @@ void sigHandler(int sig) {
     // close SharedMemory
     printf("<Client> detaching from server's shared memory...\n");
     free_shared_memory(reqSM);
+
+    // close SharedMemory
+    printf("<Client> detaching from server's shared memory...\n");
+    free_shared_memory(reqFileSM);
 
     // remove Semaphore
     printf("<Client> removing semaphore...\n");

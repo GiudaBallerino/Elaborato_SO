@@ -33,6 +33,12 @@ size_t appendToPath(char *path, char *directory) {
   return length;
 }
 
+const char *getFilenameExt(const char *filename) {
+  const char *dot = strrchr(filename, '.');
+  if(!dot || dot == filename) return "";
+  return dot;
+}
+
 void append_file(char *pathname, struct list *l) {
   struct file *e = (struct file*) malloc(sizeof(struct file));
   strcpy(e->pathname, pathname);

@@ -29,6 +29,7 @@ int openFile(char *pathname);
 int getFileSize(char *pathname);
 int getFileSizeFromFD(int fd);
 size_t appendToPath(char *path, char *directory);
+const char *getFilenameExt(const char *filename);
 
 void append_file(char *pathname, struct list *l);
 void reset_list(struct list *l);

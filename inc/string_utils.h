@@ -8,3 +8,4 @@
 
 int strStartWith(const char *string, const char *prefix);
 int strEndsWith(const char *string, const char *suffix);
+char *strRemoveSuffix(char *string, const char* suffix);

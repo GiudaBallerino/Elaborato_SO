@@ -13,9 +13,9 @@
 
 // definition of the union semun
 union semun {
-    int val;
-    struct semid_ds * buf;
-    unsigned short * array;
+  int val;
+  struct semid_ds * buf;
+  unsigned short * array;
 };
 
 int semGet(int semKey, int sem_num);

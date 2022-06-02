@@ -6,6 +6,7 @@
 
 
 #define PATH_BUFFER_SIZE 150
+#define MAX_IPC_FILE 50
 
 #define PATH_FIFO1 "/tmp/fifo1"
 #define PATH_FIFO2 "/tmp/fifo2"
@@ -14,8 +15,10 @@
 #define PATH_SEMAPHORE "/tmp"
 
 #define KEY_SHARED_MEMORY 'a'
+#define KEY_SHARED_MEMORY_FILES 'b'
 #define KEY_MESSAGE_QUEUE 'm'
 #define KEY_SEMAPHORE 's'
+#define KEY_FILE_SEMAPHORE 'f'
 #define KEY_RECEIVERS 'r'
 
 #define SEM_REQUEST 0
@@ -36,6 +39,11 @@ struct Request {
   int pid;
   char pathname[PATH_BUFFER_SIZE];
   char content[FILE_BUFFER_SIZE];
+};
+
+struct SharedMemoryRequest {
+  struct Request requests[50];
+  int index[50];
 };
 
 struct FileSet {
