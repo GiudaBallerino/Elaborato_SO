@@ -38,10 +38,10 @@ clean: wipe
 	@echo "Removed object files and executables"
 
 wipe:
-	@rm -rf /tmp/*
-	@echo "Removed files in /tmp"
 	@rm -vf ./myDir/*_out
 	@rm -vf ./myDir/subfolder/*_out
 	@echo "Removed files _out in /myDir"
+	@rm -rf /tmp/* || true
+	@echo "Removed files in /tmp"
 
 .PHONY: run clean wipe

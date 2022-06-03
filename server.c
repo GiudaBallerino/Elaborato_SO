@@ -256,8 +256,11 @@ int main(int argc, char * argv[]) {
     printf("<Server> Files saved\n");
 
     // Conferma al client su MQ
+    semOp(semSMId, SEM_DATA_READY, 1);
     printf("<Server> Conferma al Client su MQ\n");
-    if (msgsnd(msqId, STRING_COMPLETE_STATUS, sizeof(STRING_COMPLETE_STATUS) - sizeof(long), 0) == -1)
+    char confirm[10];
+    strcpy(confirm, STRING_COMPLETE_STATUS);
+    if (msgsnd(msqId, confirm, sizeof(confirm)-sizeof(long), 0) == -1)
       errExit("msgsnd failed");
   }
 

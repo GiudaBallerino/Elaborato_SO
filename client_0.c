@@ -44,8 +44,8 @@ int semRECId;
 
 
 int main(int argc, char * argv[]) {
-  if (argc > 2) {
-  // if (argc != 2) {
+  // if (argc > 2) {
+  if (argc != 2) {
     printf("Usage: %s <sourceDir>\n", argv[0]);
     return 1;
   }
@@ -53,7 +53,7 @@ int main(int argc, char * argv[]) {
   list = (struct list*) malloc(sizeof(struct list));
   list->entry = NULL;
 
-  char sourceDir[PATH_BUFFER_SIZE] = "/home/runner/Elaborato/myDir";
+  char sourceDir[PATH_BUFFER_SIZE]; // = "/home/runner/Elaborato/myDir";
   if (argc == 2)
     strcpy(sourceDir, argv[1]);
 
@@ -214,6 +214,7 @@ int main(int argc, char * argv[]) {
         strcpy(fifo2Part.pathname, f->pathname);
 
         struct Request msqPart;
+        msqPart.mtype = 1;
         msqPart.pid = pid;
         strcpy(msqPart.pathname, f->pathname);
         strcpy(msqPart.content, buffer[2]);
@@ -328,6 +329,7 @@ int main(int argc, char * argv[]) {
     //   printf("Child %d exit status = %d\n", pid, WEXITSTATUS(status));
 
     // attesa conferma dal server in MQ
+    semOp(semSMId, SEM_DATA_READY, -1);
     char confirm[10];
     if (msgrcv(msqId, &confirm, sizeof(confirm)-sizeof(long), 0, 0) == -1)
       errExit("<Client> MQ is broken");
@@ -361,7 +363,7 @@ int search(char path[]) {
       if (strStartWith(dentry->d_name, STRING_TO_SEARCH) == 0
         // && strEndsWith(dentry->d_name, STRING_FILE_OUT) == 0
         && (getFileSize(path) > FILE_MAX_SIZE) == 0) {
-        printf("Regular file: %s\n", path);
+        // printf("Regular file: %s\n", path);
         append_file(path, list);
         count++;
       }

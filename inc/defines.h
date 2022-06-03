@@ -4,7 +4,6 @@
 
 #pragma once
 
-
 #define PATH_BUFFER_SIZE 150
 #define MAX_IPC_FILE 50
 
@@ -36,14 +35,15 @@
 
 
 struct Request {
+  long mtype;
   int pid;
   char pathname[PATH_BUFFER_SIZE];
   char content[FILE_BUFFER_SIZE];
 };
 
 struct SharedMemoryRequest {
-  struct Request requests[50];
-  int index[50];
+  struct Request requests[MAX_IPC_FILE];
+  int index[MAX_IPC_FILE];
 };
 
 struct FileSet {
