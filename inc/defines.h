@@ -35,7 +35,6 @@
 
 
 struct Request {
-  long mtype;
   int pid;
   char pathname[PATH_BUFFER_SIZE];
   char content[FILE_BUFFER_SIZE];

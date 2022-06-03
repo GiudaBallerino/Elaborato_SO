@@ -131,7 +131,6 @@ int main(int argc, char * argv[]) {
     key_t semKeyREC= get_key(PATH_SEMAPHORE, KEY_RECEIVERS);
     printf("<Server> get semaphore set for receivers...\n");
     int semRECId = semGet(semKeyREC, 4);
-    printf("<Server> found semaphore with ID: %i\n", semRECId);
 
     // si mette in ascolto ciclicamente sui 4 canali
     for(int n = 0; n < files * 4; ) {
@@ -200,19 +199,9 @@ int main(int argc, char * argv[]) {
         }
         semOp(semSMMutexId, 0, 1);
       }
-      // printf("<Server> reading on SharedMemory...\n");
-      // if (semOpNoWait(semSMId, SEM_DATA_READY, -1) == -1) {
-      //   if (errno != EAGAIN)
-      //     errExit("semop failed");
-      // } else {
-      //   // semOp(semSMId, SEM_DATA_READY, -1);
-      //   printf("<Server> received data from %i on SM\n", reqSM->pid);
-      //   addFile(set, files, reqSM, 3);
-      //   n++;
-      //   semOp(semSMId, SEM_REQUEST, 1);
-      // }
     }
     printf("<Server> Files received\n");
+    // printSemaphoresValue(semRECId);
 
     for(int i=0; i < files; i++) {
       // printf("<Server> File %i -> FF1: %s - FF2: %s - MQ: %s - SM: %s\n", i+1, set[i].contentFF1, set[i].contentFF2, set[i].contentMQ, set[i].contentSM);
@@ -345,7 +334,7 @@ void formatStringOutPut(char *buffer, int part, char *path,int pid){
       sprintf(buffer, STRING_OUTPUT, part, path, pid, "FIFO2");
       break;
     case 3:
-      sprintf(buffer,STRING_OUTPUT, part, path, pid, "MsgQueue");
+      sprintf(buffer, STRING_OUTPUT, part, path, pid, "MsgQueue");
       break;
     case 4:
       sprintf(buffer, STRING_OUTPUT, part, path, pid, "ShdMem");

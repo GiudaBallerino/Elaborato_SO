@@ -18,6 +18,7 @@ union semun {
   unsigned short * array;
 };
 
+void printSemaphoresValue(int semid);
 int semGet(int semKey, int sem_num);
 void semOp(int semId, unsigned short sem_num, short sem_op);
 int semOpNoWait(int semId, unsigned short sem_num, short sem_op);

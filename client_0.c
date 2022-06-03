@@ -214,7 +214,6 @@ int main(int argc, char * argv[]) {
         strcpy(fifo2Part.pathname, f->pathname);
 
         struct Request msqPart;
-        msqPart.mtype = 1;
         msqPart.pid = pid;
         strcpy(msqPart.pathname, f->pathname);
         strcpy(msqPart.content, buffer[2]);
@@ -238,9 +237,6 @@ int main(int argc, char * argv[]) {
                 sended[0] = 0;
             }
           }
-          // semOp(semRECId, 0, -1);
-          // if (write(serverFIFO1, &fifo1Part, sizeof(struct Request)) != sizeof(struct Request))
-          //   errExit("write FIFO1 failed");
   
           // FIFO2
           if (sended[1] == 1) {
@@ -255,9 +251,6 @@ int main(int argc, char * argv[]) {
                 sended[1] = 0;
             }
           }
-          // semOp(semRECId, 1, -1);
-          // if (write(serverFIFO2, &fifo2Part, sizeof(struct Request)) != sizeof(struct Request))
-          //   errExit("write FIFO2 failed");
   
           // MsgQueue
           if (sended[2] == 1) {
@@ -273,10 +266,6 @@ int main(int argc, char * argv[]) {
                 sended[2] = 0;
             }
           }
-          // semOp(semRECId, 2, -1);
-          // size_t mSize = sizeof(struct Request) - sizeof(long);
-          // if (msgsnd(msqId, &msqPart, mSize, 0) == -1)
-          //   errExit("msgsnd failed");
   
           // SharedMemory
           if (sended[3] == 1) {
@@ -290,27 +279,24 @@ int main(int argc, char * argv[]) {
                 else
                   semOp(semRECId, 3, 1); // libera semaforo
               } else {
-                int index = 0;
-                for(; index < MAX_IPC_FILE; index++)
-                  if (reqFileSM->index[index] == 0)
+                int index = -1;
+                for(int i=0; i < MAX_IPC_FILE; i++)
+                  if (reqFileSM->index[i] == 0) {
+                    index = i;
                     break;
-                reqFileSM->requests[index].pid = pid;
-                strcpy(reqFileSM->requests[index].pathname, f->pathname);
-                strcpy(reqFileSM->requests[index].content, buffer[3]);
-  
-                reqFileSM->index[index] = 1;
-                sended[3] = 0;
-                semOp(semSMMutexId, 0, 1);
+                  }
+                if (index != -1) {
+                  reqFileSM->requests[index].pid = pid;
+                  strcpy(reqFileSM->requests[index].pathname, f->pathname);
+                  strcpy(reqFileSM->requests[index].content, buffer[3]);
+    
+                  reqFileSM->index[index] = 1;
+                  sended[3] = 0;
+                  semOp(semSMMutexId, 0, 1);
+                }
               }
             }
           }
-          
-          // semOp(semSMId, SEM_REQUEST, -1);
-          // // printf("<Client_%i> sending %s on SM\n", index, buffer[3]);
-          // reqSM->pid = pid;
-          // strcpy(reqSM->pathname, f->pathname);
-          // strcpy(reqSM->content, buffer[3]);
-          // semOp(semSMId, SEM_DATA_READY, 1);
         }
 
         close(fd); // close file
